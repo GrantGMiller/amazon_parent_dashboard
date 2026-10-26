@@ -87,12 +87,17 @@ class ParentDashboard:
                 "accept": "application/json, text/plain, */*",
                 "origin": BASE_URL,
                 "referer": BASE_URL + "/",
+
             }
         )
         self._session.cookies.update(_parse_cookies(raw))
-        self._csrf = csrf_token or os.environ.get("AMAZON_PARENTS_CSRF_TOKEN")
+        self._csrf = csrf_token or os.environ.get("AMAZON_PARENTS_CSRF_TOKEN") or self._session.cookies.get(
+            "ft-panda-csrf-token", None)
         if self._csrf:
             self._session.cookies.set("ft-panda-csrf-token", self._csrf)
+            self._session.cookies.set('x-amzn-csrf', self._csrf)
+        print('98 self._csrf', self._csrf)
+
         self._children: Optional[Dict[str, str]] = dict(children) if children else None
         self._time_zone = time_zone
 
@@ -147,12 +152,14 @@ class ParentDashboard:
         resp = self._session.get(BASE_URL + "/")
         if "signin" in resp.url:
             raise AuthError("Cookies are expired or invalid (redirected to sign-in).")
+
         for pattern in _CSRF_PATTERNS:
             m = pattern.search(str(resp.headers))
             if m:
                 self._csrf = m.group(1)
                 self._session.cookies.set("ft-panda-csrf-token", self._csrf)
                 return
+
         raise AuthError(
             "Couldn't find the CSRF token in the home page. Copy the "
             "'x-amzn-csrf' request header from your browser and pass "
@@ -161,9 +168,6 @@ class ParentDashboard:
 
     def _request(self, method: str, path: str, *, params=None, body=None,
                  _retry: bool = True) -> requests.Response:
-        print('_request=', method, path, params, body)
-        if not self._csrf:
-            self._refresh_csrf()
 
         resp = self._session.request(
             method,
@@ -172,7 +176,7 @@ class ParentDashboard:
             json=body,
             headers={"x-amzn-csrf": self._csrf},
         )
-        print('139 resp.text=', resp.text)
+
         if "signin" in resp.url:
             raise AuthError("Cookies are expired or invalid (redirected to sign-in).")
         if resp.status_code in (401, 403) and _retry and method.upper() in {
@@ -180,8 +184,6 @@ class ParentDashboard:
         }:
             previous_csrf = self._csrf
             try:
-                print('_request response=', resp.status_code, resp.text)
-                print('_request response.headers=', resp.headers)
                 self._refresh_csrf()
             except AuthError as exc:
                 raise AuthError(
@@ -193,8 +195,6 @@ class ParentDashboard:
                     method, path, params=params, body=body, _retry=False
                 )
         if not resp.ok:
-            print('160 _request response=', resp.status_code, resp.text, resp.url)
-            print('161 _request response.headers=', resp.headers)
             raise ParentDashboardError(
                 f"{method} {path} -> {resp.status_code}: {resp.text[:200]}"
             )
@@ -235,6 +235,9 @@ class ParentDashboard:
         :param minutes:
         :return: bool response.ok
         '''
+        if not self._csrf:
+            self._refresh_csrf()
+
         if minutes <= 0:
             raise ValueError("minutes must be positive")
         resp = self._request(
@@ -336,6 +339,9 @@ if __name__ == "__main__":
     pd = ParentDashboard(
         cookies=config.cookie_string,
     )
+
+    all_chidren = pd.get_children()
+    print('all_children:', all_chidren)
 
     child_name = config.child_name
     max_time = pd.get_max_screentime(child_name)
