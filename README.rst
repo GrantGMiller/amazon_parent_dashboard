@@ -73,12 +73,12 @@ Get configured child names::
 
 Read the raw time-limit response for a child::
 
-    limits = dashboard.get_time_limits("Lillianne")
+    limits = dashboard.get_time_limits("Toby Flenderson")
     print(limits)
 
 Get the current day's screen-time limit in minutes::
 
-    max_minutes = dashboard.get_max_screentime("Lillianne")
+    max_minutes = dashboard.get_max_screentime("Dwight Schrute")
     if max_minutes is None:
         print("No enabled screen-time limit was found for today.")
     else:
@@ -91,7 +91,7 @@ under ``timeLimits.contentTimeLimits.ALL`` for the matching day.
 
 Set bonus time::
 
-    dashboard.add_bonus_time("Lillianne", 15)
+    dashboard.add_bonus_time("Stanley Hudson", 15)
 
 The current implementation sends a ``PUT`` request to
 ``/ajax/set-bonus-time`` with a duration of 15 minutes. **Despite the method
@@ -102,11 +102,11 @@ assume calling it twice safely adds twice as much time.
 
 Pause devices for a child for 60 minutes::
 
-    dashboard.pause_devices("Rosalie", 60)
+    dashboard.pause_devices("Andy Bernard", 60)
 
 Resume devices for a child::
 
-    dashboard.resume_devices("Rosalie")
+    dashboard.resume_devices("Lizzard King")
 
 
 
@@ -208,7 +208,7 @@ example::
         time_zone="America/New_York",
     )
 
-    child_name = "Lillianne"
+    child_name = "Bobby D. Tables"
     max_minutes = dashboard.get_max_screentime(child_name)
 
     # Insert your own decision logic here.
@@ -234,7 +234,7 @@ Example error handling::
     from parent_dashboard import AuthError, ParentDashboardError
 
     try:
-        dashboard.add_bonus_time("Lillianne", 10)
+        dashboard.add_bonus_time("Kevin Malone", 10)
     except AuthError as exc:
         # Notify yourself that the session needs attention.
         print(f"Authentication needs attention: {exc}")
