@@ -105,6 +105,61 @@ class ParentDashboard:
 
     # ------------------------------------------------------------------ http
 
+    def discover_child_directed_ids(self) -> Dict[str, str]:
+        """Discover child names and directed IDs from the dashboard HTML."""
+
+        response = self._request(
+            method='get',
+            path=f"/",
+        )
+        response.raise_for_status()
+
+        if "signin" in response.url.lower():
+            raise AuthError("Cookies are expired or invalid.")
+
+        # Extract the JSON string passed to JSON.parse(...).
+        match = re.search(
+            r"window\.__PREFETCHED_HOUSEHOLD\s*=\s*"
+            r"JSON\.parse\('((?:\\.|[^'\\])*)'\)\s*;",
+            response.text,
+        )
+
+        if not match:
+            raise ParentDashboardError(
+                "Could not find __PREFETCHED_HOUSEHOLD in the dashboard HTML."
+            )
+
+        # The JavaScript string contains escaped JSON. Decode the string
+        # before parsing the resulting JSON object.
+        household_json = json.loads(f'"{match.group(1)}"')
+        household = json.loads(household_json)
+
+        children = {
+            member["firstName"]: member["directedId"]
+            for member in household.get("members", [])
+            if member.get("role") == "CHILD"
+               and member.get("firstName")
+               and member.get("directedId")
+        }
+
+        if not children:
+            raise ParentDashboardError(
+                "No children were found in the household data."
+            )
+
+        print("Discovered children:")
+        for name, directed_id in children.items():
+            print(f"  {name}: {directed_id}")
+
+        print("\nUse this mapping in your configuration:")
+        print("child_name_id_map = {")
+        for name, directed_id in children.items():
+            print(f'    "{name}": "{directed_id}",')
+        print("}")
+
+        self._children = children
+        return children
+
     def _refresh_csrf(self) -> None:
         print('Refreshing CSRF token', BASE_URL)
         resp = self._session.get(BASE_URL + "/")
@@ -128,6 +183,8 @@ class ParentDashboard:
         print('_request=', method, path, params, body)
         if not self._csrf:
             self._refresh_csrf()
+
+
         resp = self._session.request(
             method,
             BASE_URL + path,
@@ -168,9 +225,7 @@ class ParentDashboard:
     def _load_children(self) -> Dict[str, str]:
         """Return child names mapped to their Amazon directed IDs."""
         if self._children is None:
-            raise ParentDashboardError(
-                'Child names are not available. Please pass children={"name":"id"} to the constructor.')
-
+            self.discover_child_directed_ids()
         return self._children
 
     def _child_id(self, child_name: str) -> str:
@@ -302,8 +357,8 @@ if __name__ == "__main__":
 
     pd = ParentDashboard(
         cookies=helper.get_cookie_dict(config.cookie_string),
-        # children=config.child_name_id_map
     )
+
     child_name = config.child_name
     max_time = pd.get_max_screentime(child_name)
     print(f'Max time for {child_name} is {max_time}')
