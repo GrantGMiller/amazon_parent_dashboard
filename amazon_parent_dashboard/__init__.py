@@ -39,7 +39,7 @@ _CSRF_PATTERNS = [
     re.compile(r'"x-amzn-csrf"\s*:\s*"([^"]+)"', re.I),
     re.compile(r'<meta[^>]+name=["\']x-amzn-csrf["\'][^>]+content=["\']([^"\']+)', re.I),
     re.compile(r'<meta[^>]+name=["\']csrf-token["\'][^>]+content=["\']([^"\']+)', re.I),
-    re.compile(r'ft-panda-csrf-token=([^;\s,]+)',)
+    re.compile(r'ft-panda-csrf-token=([^;\s,]+)', ) # this is the one we want
 ]
 
 
@@ -148,32 +148,18 @@ class ParentDashboard:
                 "No children were found in the household data."
             )
 
-        print("Discovered children:")
-        for name, directed_id in children.items():
-            print(f"  {name}: {directed_id}")
-
-        print("\nUse this mapping in your configuration:")
-        print("child_name_id_map = {")
-        for name, directed_id in children.items():
-            print(f'    "{name}": "{directed_id}",')
-        print("}")
 
         self._children = children
         return children
 
     def _refresh_csrf(self) -> None:
-        print('Refreshing CSRF token', BASE_URL)
         resp = self._session.get(BASE_URL + "/")
-        print('resp.status_code=', resp.status_code)
-        print('167 resp.headers=', resp.headers)
-        print('resp.text=', resp.text)
         if "signin" in resp.url:
             raise AuthError("Cookies are expired or invalid (redirected to sign-in).")
         for pattern in _CSRF_PATTERNS:
             m = pattern.search(str(resp.headers))
             if m:
                 self._csrf = m.group(1)
-                print('found csrf=', self._csrf)
                 self._session.cookies.set("ft-panda-csrf-token", self._csrf)
                 return
         raise AuthError(

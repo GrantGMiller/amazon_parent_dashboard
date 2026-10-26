@@ -53,7 +53,6 @@ You can pass cookies directly::
 
     dashboard = ParentDashboard(
         cookies=cookies,
-        children={str(child_name): str(child_id)}
     )
 
 The example cookie names above are illustrative. Copy the required cookie
@@ -64,26 +63,6 @@ commit them to source control, include them in bug reports, or print them in
 logs. Use environment variables or a secrets manager and restrict access to
 the server account running the client.
 
-Configuring children
---------------------
-
-The client does not automatically discover children names. Pass a mapping from each
-child's display name to their Amazon ``childDirectedId`` / directed ID::
-
-    children = {
-        "Forrest": "amzn1.account.REPLACE_WITH_DIRECTED_ID",
-        "Jenny":   "amzn1.account.REPLACE_WITH_DIRECTED_ID",
-    }
-
-    dashboard = ParentDashboard(
-        cookies=cookies,
-        children=children,
-    )
-
-Replace each placeholder with the actual directed ID for that child. The
-client matches names case-insensitively, but the supplied name must otherwise
-match one of the configured names. If ``children`` is omitted, calls that
-require a child will raise ``ParentDashboardError``.
 
 Basic usage
 -----------
@@ -138,7 +117,6 @@ The constructor defaults to ``America/New_York``::
 
     dashboard = ParentDashboard(
         cookies=cookies,
-        children=children,
         time_zone="America/New_York",
     )
 
@@ -149,15 +127,12 @@ for your household.
 Constructor reference
 ---------------------
 
-``ParentDashboard(cookies=None, children=None, time_zone="America/New_York")``
+``ParentDashboard(cookies=None, time_zone="America/New_York")``
 
 ``cookies``
     Cookie dictionary, JSON string, or semicolon-separated cookie-header
     string. If omitted, the client reads ``AMAZON_PARENTS_COOKIES``. If neither
     is set, construction raises ``AuthError``.
-
-``children``
-    Dictionary mapping child display names to directed IDs.
 
 ``time_zone``
     IANA time-zone string used for bonus-time requests and weekday selection.
@@ -230,7 +205,6 @@ example::
     from parent_dashboard import ParentDashboard
 
     dashboard = ParentDashboard(
-        children=children,
         time_zone="America/New_York",
     )
 
