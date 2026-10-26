@@ -1,0 +1,351 @@
+Amazon Kids Parent Dashboard Client
+====================================
+
+Overview
+--------
+
+This module provides an unofficial Python client for the Amazon Kids Parent
+Dashboard at https://parents.amazon.com.
+
+It was developed from browser network captures and uses Parent Dashboard
+endpoints that are not documented as a public API. Amazon may change these
+endpoints, request formats, authentication requirements, or response formats
+at any time.
+
+The client currently supports:
+
+* Listing the configured child names.
+* Reading a child's time-limit configuration.
+* Getting the current day's maximum screen-time limit.
+* Setting bonus time for a child.
+* Pausing and resuming a child's devices.
+
+Authentication uses cookies from an already authenticated Amazon session. This
+module does not implement an OAuth flow or guarantee automatic renewal of an
+expired session.
+
+Requirements
+------------
+
+* Python 3.9 or newer (the code uses ``from __future__ import annotations``).
+* ``requests``
+* ``pytz``
+* A local ``config`` module if running the module's built-in example.
+* A local ``helper`` module if running the module's built-in example.
+
+Install the third-party dependencies with::
+
+    python -m pip install requests pytz
+
+Importing the module does not require ``config`` or ``helper`` to be installed
+if you import it as a module and do not execute its ``__main__`` block. The
+shown module imports ``config`` at module scope, however, so in its current
+form ``config`` must be importable even when importing the module.
+
+Authentication
+--------------
+
+The constructor accepts cookies in one of three formats:
+
+#. A Python dictionary mapping cookie names to cookie values.
+#. A JSON string representing that dictionary.
+#. A cookie-header string containing semicolon-separated ``name=value`` pairs.
+
+You can pass cookies directly::
+
+    from parent_dashboard import ParentDashboard
+
+    cookies = {
+        "session-id": "YOUR_SESSION_ID",
+        "session-token": "YOUR_SESSION_TOKEN",
+        # Add the other cookies required by your current session.
+    }
+
+    dashboard = ParentDashboard(
+        cookies=cookies,
+        csrf_token="YOUR_X_AMZN_CSRF_VALUE",
+    )
+
+The example cookie names above are illustrative. Copy the required cookie
+pairs from your own authenticated browser session; the exact set may vary.
+
+Alternatively, provide the cookies through the
+``AMAZON_PARENTS_COOKIES`` environment variable. It may contain either a JSON
+object or a cookie-header string::
+
+    export AMAZON_PARENTS_COOKIES='{"session-id":"YOUR_SESSION_ID","session-token":"YOUR_SESSION_TOKEN"}'
+
+Or::
+
+    export AMAZON_PARENTS_COOKIES='session-id=YOUR_SESSION_ID; session-token=YOUR_SESSION_TOKEN'
+
+The CSRF token can be passed as ``csrf_token=...`` or through
+``AMAZON_PARENTS_CSRF_TOKEN``::
+
+    export AMAZON_PARENTS_CSRF_TOKEN='YOUR_X_AMZN_CSRF_VALUE'
+
+If no CSRF token is provided, the client attempts to retrieve one by requesting
+the Parent Dashboard home page and searching its HTML for several possible
+token patterns. This is a best-effort implementation and may stop working if
+Amazon changes the page. If retrieval fails, pass the current
+``x-amzn-csrf`` request-header value from your authenticated browser session.
+
+**Keep cookies and CSRF tokens secret.** Treat them like passwords: do not
+commit them to source control, include them in bug reports, or print them in
+logs. Use environment variables or a secrets manager and restrict access to
+the server account running the client.
+
+Configuring children
+--------------------
+
+The client does not automatically discover children. Pass a mapping from each
+child's display name to their Amazon ``childDirectedId`` / directed ID::
+
+    children = {
+        "Lillianne": "amzn1.account.REPLACE_WITH_DIRECTED_ID",
+        "Rosalie":   "amzn1.account.REPLACE_WITH_DIRECTED_ID",
+        "Linden":    "amzn1.account.REPLACE_WITH_DIRECTED_ID",
+        "Rowan":     "amzn1.account.REPLACE_WITH_DIRECTED_ID",
+    }
+
+    dashboard = ParentDashboard(
+        cookies=cookies,
+        csrf_token="YOUR_X_AMZN_CSRF_VALUE",
+        children=children,
+    )
+
+Replace each placeholder with the actual directed ID for that child. The
+client matches names case-insensitively, but the supplied name must otherwise
+match one of the configured names. If ``children`` is omitted, calls that
+require a child will raise ``ParentDashboardError``.
+
+Basic usage
+-----------
+
+Get configured child names::
+
+    print(dashboard.get_children())
+
+Read the raw time-limit response for a child::
+
+    limits = dashboard.get_time_limits("Lillianne")
+    print(limits)
+
+Get the current day's screen-time limit in minutes::
+
+    max_minutes = dashboard.get_max_screentime("Lillianne")
+    if max_minutes is None:
+        print("No enabled screen-time limit was found for today.")
+    else:
+        print(f"Today's limit: {max_minutes} minutes")
+
+``get_max_screentime`` uses the configured time zone to choose the current
+weekday. It returns ``None`` when the day's schedule or content-time limits
+are disabled. Otherwise it expects the response to contain an integer value
+under ``timeLimits.contentTimeLimits.ALL`` for the matching day.
+
+Set bonus time::
+
+    dashboard.add_bonus_time("Lillianne", 15)
+
+The current implementation sends a ``PUT`` request to
+``/ajax/set-bonus-time`` with a duration of 15 minutes. **Despite the method
+name, it is not yet confirmed whether the endpoint adds 15 minutes to an
+existing bonus or sets the bonus duration to 15 minutes.** Verify this behavior
+carefully in the Parent Dashboard before relying on repeated calls. Do not
+assume calling it twice safely adds twice as much time.
+
+Pause devices for a child for 60 minutes::
+
+    dashboard.pause_devices("Rosalie", 60)
+
+Resume devices for a child::
+
+    dashboard.resume_devices("Rosalie")
+
+The captured request used a 60-minute pause duration. Other pause durations
+are accepted by the Python method but have not been verified against the
+service.
+
+Time zone
+---------
+
+The constructor defaults to ``America/New_York``::
+
+    dashboard = ParentDashboard(
+        cookies=cookies,
+        children=children,
+        time_zone="America/New_York",
+    )
+
+The time zone is sent with bonus-time requests and is also used to determine
+the weekday in ``get_max_screentime``. Use an appropriate IANA time-zone name
+for your household.
+
+Constructor reference
+---------------------
+
+``ParentDashboard(cookies=None, csrf_token=None, children=None, time_zone="America/New_York")``
+
+``cookies``
+    Cookie dictionary, JSON string, or semicolon-separated cookie-header
+    string. If omitted, the client reads ``AMAZON_PARENTS_COOKIES``. If neither
+    is set, construction raises ``AuthError``.
+
+``csrf_token``
+    Optional CSRF token. If omitted, the client reads
+    ``AMAZON_PARENTS_CSRF_TOKEN`` and otherwise tries to scrape the home page.
+
+``children``
+    Dictionary mapping child display names to directed IDs.
+
+``time_zone``
+    IANA time-zone string used for bonus-time requests and weekday selection.
+
+Public methods
+--------------
+
+``get_children()``
+    Return the configured child names as a list. This does not discover
+    children from Amazon; it returns the names supplied in ``children``.
+
+``get_time_limits(child_name)``
+    Return the raw JSON response from the adjusted-time-limits endpoint.
+
+``get_max_screentime(child_name)``
+    Return today's enabled ``ALL`` content-time limit in minutes, or ``None``
+    when the relevant limits are disabled. Raises ``ParentDashboardError`` if
+    the expected response structure is missing.
+
+``add_bonus_time(child_name, minutes)``
+    Send a bonus-time configuration request. ``minutes`` must be positive.
+    Whether the endpoint adds to or replaces the current bonus has not been
+    confirmed.
+
+``pause_devices(child_name, minutes)``
+    Request that the child's devices be paused for the requested number of
+    minutes. ``minutes`` must be positive.
+
+``resume_devices(child_name)``
+    Request that the child's devices be resumed.
+
+Exceptions
+----------
+
+``ParentDashboardError``
+    Base exception for client errors, unexpected responses, and HTTP failures.
+
+``AuthError``
+    Raised when cookies are missing/invalid, the request is redirected to
+    sign-in, or CSRF-token retrieval fails.
+
+``KeyError``
+    Raised by child lookup when the requested name is not in the configured
+    mapping.
+
+``ValueError``
+    Raised when a pause or bonus duration is not positive.
+
+Running the module directly
+---------------------------
+
+The module's ``__main__`` example expects a local ``config`` module containing
+at least these attributes::
+
+    cookie_string
+    csrf_token
+    child_name_id_map
+    child_name
+
+It also expects a ``helper`` module with a ``get_cookie_dict`` function.
+The example reads the selected child's maximum screen-time limit. Adapt these
+names to your own configuration, and do not commit real authentication
+credentials to a repository.
+
+Automation and server deployment
+--------------------------------
+
+For a scheduled job, keep your rule logic separate from the client. For
+example::
+
+    from parent_dashboard import ParentDashboard
+
+    dashboard = ParentDashboard(
+        children=children,
+        time_zone="America/New_York",
+    )
+
+    child_name = "Lillianne"
+    max_minutes = dashboard.get_max_screentime(child_name)
+
+    # Insert your own decision logic here.
+    # Only call add_bonus_time after verifying the endpoint's semantics.
+
+Run the script using a scheduler such as ``systemd`` or cron. In production:
+
+* Store credentials in environment variables or a secrets manager.
+* Run the job as a dedicated, unprivileged Linux user.
+* Log decisions and outcomes, but never log cookies, CSRF tokens, or full
+  authentication headers.
+* Handle ``AuthError`` and notify the administrator when manual sign-in is
+  required.
+* Add persistent state or an idempotency record so a retried job does not
+  accidentally award the same bonus more than once.
+* Test with a small, controlled bonus and verify the result in the Parent
+  Dashboard before enabling automatic awards.
+* Do not assume that a browser session will remain valid indefinitely. This
+  client does not implement supported OAuth refresh-token handling.
+
+Example error handling::
+
+    from parent_dashboard import AuthError, ParentDashboardError
+
+    try:
+        dashboard.add_bonus_time("Lillianne", 10)
+    except AuthError as exc:
+        # Notify yourself that the session or CSRF token needs attention.
+        print(f"Authentication needs attention: {exc}")
+    except ParentDashboardError as exc:
+        print(f"Parent Dashboard request failed: {exc}")
+
+Troubleshooting
+---------------
+
+**``AuthError: No cookies``**
+
+Pass ``cookies=...`` or set ``AMAZON_PARENTS_COOKIES``.
+
+**Redirected to sign-in / invalid cookies**
+
+The session may have expired or been revoked. Obtain a fresh authenticated
+session and update the configured cookies. The client cannot guarantee
+automatic reauthentication.
+
+**Couldn't find the CSRF token**
+
+Amazon may have changed the home page or token format. Supply the current
+``x-amzn-csrf`` value through ``csrf_token`` or
+``AMAZON_PARENTS_CSRF_TOKEN``.
+
+**HTTP 401 or 403**
+
+The session may be invalid, the CSRF token may be stale, or the endpoint may
+require a different request format. For eligible read-only requests, the
+client attempts one CSRF refresh and retry. It does not automatically retry
+state-changing requests.
+
+**Unexpected time-limit response**
+
+Inspect the raw result of ``get_time_limits(child_name)``. The parser in
+``get_max_screentime`` expects ``periodConfigurations`` with a matching
+``DayOfWeek`` entry and an integer ``ALL`` value.
+
+Limitations and disclaimer
+--------------------------
+
+This is an unofficial client built from browser network captures. It is not
+an Amazon-supported SDK, and the endpoints are not guaranteed to remain
+available or compatible. The client does not currently discover child IDs,
+guarantee session renewal, or verify whether setting bonus time is additive.
+Use it only with an account and devices you are authorized to manage, and
+verify changes in the Parent Dashboard.

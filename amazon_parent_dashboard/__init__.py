@@ -15,7 +15,6 @@ Auth: the HAR had its cookies stripped, so this takes your logged-in
 amazon.com cookies from the constructor or the AMAZON_PARENTS_COOKIES env var
 (either a JSON object or a "name=value; name=value" header string).
 """
-from __future__ import annotations
 
 import json
 import os
@@ -107,7 +106,9 @@ class ParentDashboard:
     # ------------------------------------------------------------------ http
 
     def _refresh_csrf(self) -> None:
+        print('Refreshing CSRF token', BASE_URL)
         resp = self._session.get(BASE_URL + "/")
+        print('resp.text=', resp.text)
         if "signin" in resp.url:
             raise AuthError("Cookies are expired or invalid (redirected to sign-in).")
         for pattern in _CSRF_PATTERNS:
@@ -124,6 +125,7 @@ class ParentDashboard:
 
     def _request(self, method: str, path: str, *, params=None, body=None,
                  _retry: bool = True) -> requests.Response:
+        print('_request=', method, path, params, body)
         if not self._csrf:
             self._refresh_csrf()
         resp = self._session.request(
@@ -133,6 +135,7 @@ class ParentDashboard:
             json=body,
             headers={"x-amzn-csrf": self._csrf},
         )
+        print('139 resp.text=', resp.text)
         if "signin" in resp.url:
             raise AuthError("Cookies are expired or invalid (redirected to sign-in).")
         if resp.status_code in (401, 403) and _retry and method.upper() in {
@@ -140,6 +143,8 @@ class ParentDashboard:
         }:
             previous_csrf = self._csrf
             try:
+                print('_request response=', resp.status_code, resp.text)
+                print('_request response.headers=', resp.headers)
                 self._refresh_csrf()
             except AuthError as exc:
                 raise AuthError(
@@ -151,6 +156,8 @@ class ParentDashboard:
                     method, path, params=params, body=body, _retry=False
                 )
         if not resp.ok:
+            print('160 _request response=', resp.status_code, resp.text)
+            print('161 _request response.headers=', resp.headers)
             raise ParentDashboardError(
                 f"{method} {path} -> {resp.status_code}: {resp.text[:200]}"
             )
@@ -191,7 +198,7 @@ class ParentDashboard:
         than add to an existing bonus. Verify by calling it twice.
         :param child_name:
         :param minutes:
-        :return:
+        :return: bool response.ok
         '''
         if minutes <= 0:
             raise ValueError("minutes must be positive")
@@ -291,8 +298,10 @@ class ParentDashboard:
 
 
 if __name__ == "__main__":
+    import helper
+
     pd = ParentDashboard(
-        cookies=config.cookie_dict,
+        cookies=helper.get_cookie_dict(config.cookie_string),
         csrf_token=config.csrf_token,
         children=config.child_name_id_map
     )
@@ -300,4 +309,5 @@ if __name__ == "__main__":
     max_time = pd.get_max_screentime(child_name)
     print(f'Max time for {child_name} is {max_time}')
 
-    pd.add_bonus_time(child_name, 15)
+    # is_success = pd.add_bonus_time(child_name, 15)
+    # print(f'{"successfully" if is_success else "failed"} added bonus time to {child_name}')
