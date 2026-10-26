@@ -14,33 +14,22 @@ at any time.
 
 The client currently supports:
 
-* Listing the configured child names.
 * Reading a child's time-limit configuration.
 * Getting the current day's maximum screen-time limit.
 * Setting bonus time for a child.
 * Pausing and resuming a child's devices.
 
-Authentication uses cookies from an already authenticated Amazon session. This
+Authentication requires you to copy cookies from an already authenticated Amazon session. This
 module does not implement an OAuth flow or guarantee automatic renewal of an
 expired session.
 
-Requirements
-------------
+Requirements/Dependencies
+-------------------------
 
-* Python 3.9 or newer (the code uses ``from __future__ import annotations``).
+* Python 3.8 or newer.
 * ``requests``
 * ``pytz``
-* A local ``config`` module if running the module's built-in example.
-* A local ``helper`` module if running the module's built-in example.
 
-Install the third-party dependencies with::
-
-    python -m pip install requests pytz
-
-Importing the module does not require ``config`` or ``helper`` to be installed
-if you import it as a module and do not execute its ``__main__`` block. The
-shown module imports ``config`` at module scope, however, so in its current
-form ``config`` must be importable even when importing the module.
 
 Authentication
 --------------
@@ -63,34 +52,13 @@ You can pass cookies directly::
 
     dashboard = ParentDashboard(
         cookies=cookies,
-        csrf_token="YOUR_X_AMZN_CSRF_VALUE",
+        children={str(child_name): str(child_id)}
     )
 
 The example cookie names above are illustrative. Copy the required cookie
 pairs from your own authenticated browser session; the exact set may vary.
 
-Alternatively, provide the cookies through the
-``AMAZON_PARENTS_COOKIES`` environment variable. It may contain either a JSON
-object or a cookie-header string::
-
-    export AMAZON_PARENTS_COOKIES='{"session-id":"YOUR_SESSION_ID","session-token":"YOUR_SESSION_TOKEN"}'
-
-Or::
-
-    export AMAZON_PARENTS_COOKIES='session-id=YOUR_SESSION_ID; session-token=YOUR_SESSION_TOKEN'
-
-The CSRF token can be passed as ``csrf_token=...`` or through
-``AMAZON_PARENTS_CSRF_TOKEN``::
-
-    export AMAZON_PARENTS_CSRF_TOKEN='YOUR_X_AMZN_CSRF_VALUE'
-
-If no CSRF token is provided, the client attempts to retrieve one by requesting
-the Parent Dashboard home page and searching its HTML for several possible
-token patterns. This is a best-effort implementation and may stop working if
-Amazon changes the page. If retrieval fails, pass the current
-``x-amzn-csrf`` request-header value from your authenticated browser session.
-
-**Keep cookies and CSRF tokens secret.** Treat them like passwords: do not
+**Keep cookies secret.** Treat them like passwords: do not
 commit them to source control, include them in bug reports, or print them in
 logs. Use environment variables or a secrets manager and restrict access to
 the server account running the client.
@@ -98,19 +66,16 @@ the server account running the client.
 Configuring children
 --------------------
 
-The client does not automatically discover children. Pass a mapping from each
+The client does not automatically discover children names. Pass a mapping from each
 child's display name to their Amazon ``childDirectedId`` / directed ID::
 
     children = {
-        "Lillianne": "amzn1.account.REPLACE_WITH_DIRECTED_ID",
-        "Rosalie":   "amzn1.account.REPLACE_WITH_DIRECTED_ID",
-        "Linden":    "amzn1.account.REPLACE_WITH_DIRECTED_ID",
-        "Rowan":     "amzn1.account.REPLACE_WITH_DIRECTED_ID",
+        "Forrest": "amzn1.account.REPLACE_WITH_DIRECTED_ID",
+        "Jenny":   "amzn1.account.REPLACE_WITH_DIRECTED_ID",
     }
 
     dashboard = ParentDashboard(
         cookies=cookies,
-        csrf_token="YOUR_X_AMZN_CSRF_VALUE",
         children=children,
     )
 
@@ -163,9 +128,7 @@ Resume devices for a child::
 
     dashboard.resume_devices("Rosalie")
 
-The captured request used a 60-minute pause duration. Other pause durations
-are accepted by the Python method but have not been verified against the
-service.
+
 
 Time zone
 ---------
@@ -185,16 +148,12 @@ for your household.
 Constructor reference
 ---------------------
 
-``ParentDashboard(cookies=None, csrf_token=None, children=None, time_zone="America/New_York")``
+``ParentDashboard(cookies=None, children=None, time_zone="America/New_York")``
 
 ``cookies``
     Cookie dictionary, JSON string, or semicolon-separated cookie-header
     string. If omitted, the client reads ``AMAZON_PARENTS_COOKIES``. If neither
     is set, construction raises ``AuthError``.
-
-``csrf_token``
-    Optional CSRF token. If omitted, the client reads
-    ``AMAZON_PARENTS_CSRF_TOKEN`` and otherwise tries to scrape the home page.
 
 ``children``
     Dictionary mapping child display names to directed IDs.
@@ -253,7 +212,6 @@ The module's ``__main__`` example expects a local ``config`` module containing
 at least these attributes::
 
     cookie_string
-    csrf_token
     child_name_id_map
     child_name
 
@@ -303,7 +261,7 @@ Example error handling::
     try:
         dashboard.add_bonus_time("Lillianne", 10)
     except AuthError as exc:
-        # Notify yourself that the session or CSRF token needs attention.
+        # Notify yourself that the session needs attention.
         print(f"Authentication needs attention: {exc}")
     except ParentDashboardError as exc:
         print(f"Parent Dashboard request failed: {exc}")
@@ -321,15 +279,9 @@ The session may have expired or been revoked. Obtain a fresh authenticated
 session and update the configured cookies. The client cannot guarantee
 automatic reauthentication.
 
-**Couldn't find the CSRF token**
-
-Amazon may have changed the home page or token format. Supply the current
-``x-amzn-csrf`` value through ``csrf_token`` or
-``AMAZON_PARENTS_CSRF_TOKEN``.
-
 **HTTP 401 or 403**
 
-The session may be invalid, the CSRF token may be stale, or the endpoint may
+The session may be invalid or the endpoint may
 require a different request format. For eligible read-only requests, the
 client attempts one CSRF refresh and retry. It does not automatically retry
 state-changing requests.

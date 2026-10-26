@@ -68,7 +68,7 @@ class ParentDashboard:
     def __init__(
             self,
             cookies: Optional[Union[str, Dict[str, str]]] = None,
-            csrf_token: Optional[str] = None,
+            csrf_token: Optional[str] = 'placeholder',  # this will be populated automatically on a failed request.
             children: Optional[Dict[str, str]] = None,
             time_zone: str = "America/New_York",
     ):
@@ -302,8 +302,7 @@ if __name__ == "__main__":
 
     pd = ParentDashboard(
         cookies=helper.get_cookie_dict(config.cookie_string),
-        csrf_token=config.csrf_token,
-        children=config.child_name_id_map
+        # children=config.child_name_id_map
     )
     child_name = config.child_name
     max_time = pd.get_max_screentime(child_name)
