@@ -4,16 +4,8 @@ Built from a browser HAR capture. Endpoints confirmed by the HAR:
 
     POST /ajax/set-offscreen-time      pause / resume devices
     PUT  /ajax/set-bonus-time          bonus time
-    GET  /ajax/get-adjusted-time-limits?childDirectedId=...
+    GET  /ajax/get-adjusted-time-limits?childDirectedId=abc123...
 
-NOT covered by the HAR (see TODOs below):
-    * how to list children / map names -> directed IDs
-    * the response shape of get-adjusted-time-limits
-    * where the x-amzn-csrf token comes from (best-effort scrape of the home page)
-
-Auth: the HAR had its cookies stripped, so this takes your logged-in
-amazon.com cookies from the constructor or the AMAZON_PARENTS_COOKIES env var
-(either a JSON object or a "name=value; name=value" header string).
 """
 
 import json
@@ -39,7 +31,7 @@ _CSRF_PATTERNS = [
     re.compile(r'"x-amzn-csrf"\s*:\s*"([^"]+)"', re.I),
     re.compile(r'<meta[^>]+name=["\']x-amzn-csrf["\'][^>]+content=["\']([^"\']+)', re.I),
     re.compile(r'<meta[^>]+name=["\']csrf-token["\'][^>]+content=["\']([^"\']+)', re.I),
-    re.compile(r'ft-panda-csrf-token=([^;\s,]+)', ) # this is the one we want
+    re.compile(r'ft-panda-csrf-token=([^;\s,]+)', )  # this is the one we want
 ]
 
 
@@ -147,7 +139,6 @@ class ParentDashboard:
             raise ParentDashboardError(
                 "No children were found in the household data."
             )
-
 
         self._children = children
         return children
