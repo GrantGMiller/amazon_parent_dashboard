@@ -14,9 +14,10 @@ at any time.
 
 The client currently supports:
 
+* Retrieve the children names.
 * Reading a child's time-limit configuration.
 * Getting the current day's maximum screen-time limit.
-* Setting bonus time for a child.
+* Adding bonus time for a child.
 * Pausing and resuming a child's devices.
 
 Authentication requires you to copy cookies from an already authenticated Amazon session. This

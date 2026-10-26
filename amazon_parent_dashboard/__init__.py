@@ -39,6 +39,7 @@ _CSRF_PATTERNS = [
     re.compile(r'"x-amzn-csrf"\s*:\s*"([^"]+)"', re.I),
     re.compile(r'<meta[^>]+name=["\']x-amzn-csrf["\'][^>]+content=["\']([^"\']+)', re.I),
     re.compile(r'<meta[^>]+name=["\']csrf-token["\'][^>]+content=["\']([^"\']+)', re.I),
+    re.compile(r'ft-panda-csrf-token=([^;\s,]+)',)
 ]
 
 
@@ -68,7 +69,7 @@ class ParentDashboard:
     def __init__(
             self,
             cookies: Optional[Union[str, Dict[str, str]]] = None,
-            csrf_token: Optional[str] = 'placeholder',  # this will be populated automatically on a failed request.
+            csrf_token: Optional[str] = None,  # this will be populated automatically on a failed request.
             children: Optional[Dict[str, str]] = None,
             time_zone: str = "America/New_York",
     ):
@@ -163,13 +164,16 @@ class ParentDashboard:
     def _refresh_csrf(self) -> None:
         print('Refreshing CSRF token', BASE_URL)
         resp = self._session.get(BASE_URL + "/")
+        print('resp.status_code=', resp.status_code)
+        print('167 resp.headers=', resp.headers)
         print('resp.text=', resp.text)
         if "signin" in resp.url:
             raise AuthError("Cookies are expired or invalid (redirected to sign-in).")
         for pattern in _CSRF_PATTERNS:
-            m = pattern.search(resp.text)
+            m = pattern.search(str(resp.headers))
             if m:
                 self._csrf = m.group(1)
+                print('found csrf=', self._csrf)
                 self._session.cookies.set("ft-panda-csrf-token", self._csrf)
                 return
         raise AuthError(
@@ -183,7 +187,6 @@ class ParentDashboard:
         print('_request=', method, path, params, body)
         if not self._csrf:
             self._refresh_csrf()
-
 
         resp = self._session.request(
             method,
@@ -213,7 +216,7 @@ class ParentDashboard:
                     method, path, params=params, body=body, _retry=False
                 )
         if not resp.ok:
-            print('160 _request response=', resp.status_code, resp.text)
+            print('160 _request response=', resp.status_code, resp.text, resp.url)
             print('161 _request response.headers=', resp.headers)
             raise ParentDashboardError(
                 f"{method} {path} -> {resp.status_code}: {resp.text[:200]}"
@@ -353,15 +356,16 @@ class ParentDashboard:
 
 
 if __name__ == "__main__":
-    import helper
-
     pd = ParentDashboard(
-        cookies=helper.get_cookie_dict(config.cookie_string),
+        cookies=config.cookie_string,
     )
 
     child_name = config.child_name
     max_time = pd.get_max_screentime(child_name)
     print(f'Max time for {child_name} is {max_time}')
 
-    # is_success = pd.add_bonus_time(child_name, 15)
-    # print(f'{"successfully" if is_success else "failed"} added bonus time to {child_name}')
+    is_success = pd.add_bonus_time(child_name, 15)
+    print(f'{"successfully" if is_success else "failed"} added bonus time to {child_name}')
+
+    max_time = pd.get_max_screentime(child_name)
+    print(f'Max time for {child_name} is {max_time}')
